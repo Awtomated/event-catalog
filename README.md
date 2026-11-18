@@ -41,6 +41,16 @@ lives in the database.
 
 ## Installation
 
+The package is not published to a package index. Services install it straight from this
+repository, pinned to a commit (or a tag, once one exists):
+
+```
+django-event-catalog[full] @ git+https://github.com/Awtomated/event-catalog.git@<commit sha>
+```
+
+Without the `@<commit sha>` a service takes whatever `main` holds at its next image build, so pin
+it. For local work on the package itself, use an editable install as below.
+
 ### Service that owns triggers and runs the matcher (e.g. main-api)
 
 ```bash
@@ -452,6 +462,22 @@ Test files:
 | `tests/test_registry.py` | Registration, validation, catalog output, resolver resolution |
 | `tests/test_transport.py` | Transport loading, RedisStreamTransport, publisher behaviour |
 | `tests/test_models.py` | WorkflowTrigger DB operations, queries, atomic counter |
+
+---
+
+## CI and releasing
+
+CI (GitHub Actions, `.github/workflows/ci.yml`, Python 3.11) runs on every pull request and on
+pushes to `main`: install with the `full` extra, `python -m django test tests`, `python -m build`,
+then install the built wheel into a clean environment and import it.
+
+Nothing is published to a package index. To ship a new version:
+
+1. Merge the pull request into `main` (bump `version` in `pyproject.toml` when the change warrants
+   it, and tag the merge commit if you want a named version).
+2. In the consuming repo (`event-hub`), set the pinned ref in `requirements.txt` to the new commit
+   sha or tag (`django-event-catalog[full] @ git+https://github.com/Awtomated/event-catalog.git@<ref>`)
+   and open a pull request there.
 
 ---
 
