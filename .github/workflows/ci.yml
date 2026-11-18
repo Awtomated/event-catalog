@@ -1,0 +1,56 @@
+# CI for django-event-catalog: install with the `full` extra, run the test suite with Django's
+# test runner (the command the README documents; it needs no test dependency the package does
+# not declare), build the sdist and wheel, then install the wheel into a clean environment and
+# import it.
+#
+# The repo configures no linter, so none runs. Nothing is published; consumers install from git.
+#
+# Self-contained on purpose: the shared reusable workflow in awtomated-infra (private) cannot be
+# called from this public repo, and the CI App secrets it needs are not shared with it.
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11' # requires-python >=3.11; event-hub, the consumer, runs 3.11
+      - name: Install
+        id: install
+        run: pip install -q -e ".[full]"
+      - name: Test
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        env:
+          DJANGO_SETTINGS_MODULE: tests.settings
+        run: python -m django test tests
+      - name: Build
+        id: build
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: |
+          pip install -q build
+          python -m build
+      - name: Import smoke test (built wheel, clean environment)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          python -m venv "$RUNNER_TEMP/smoke"
+          "$RUNNER_TEMP/smoke/bin/pip" install -q "$(ls dist/*.whl)[full]"
+          cd "$RUNNER_TEMP"
+          smoke/bin/python -c "import event_catalog, event_catalog.matcher, event_catalog.registry, event_catalog.publisher, event_catalog.migrations; print('import ok from', event_catalog.__file__)"
